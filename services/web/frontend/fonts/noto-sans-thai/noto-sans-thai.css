@@ -1,0 +1,9 @@
+/* Noto Sans Thai - thai */
+@font-face {
+  font-family: 'Noto Sans Thai';
+  font-style: normal;
+  font-display: fallback;
+  font-weight: 100 900;
+  src: url(noto-sans-thai-thai-wght-normal.woff2) format('woff2-variations');
+  unicode-range: U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC;
+}

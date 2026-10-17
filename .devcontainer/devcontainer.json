@@ -1,0 +1,17 @@
+{
+  "name": "ThaiTeX",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+  "forwardPorts": [80],
+  "portsAttributes": {
+    "80": { "label": "ThaiTeX", "onAutoForward": "openBrowser" }
+  },
+  "postStartCommand": "bash thai/codespace-start.sh"
+}

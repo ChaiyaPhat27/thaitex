@@ -1,0 +1,203 @@
+extends ../../../../app/views/layout-website-redesign
+
+block vars
+	- isWebsiteRedesign = true
+
+block append meta
+	meta(name='ol-fonts' data-type='json' content=fonts)
+	meta(name='ol-canManageFonts' data-type='boolean' content=canManageFonts)
+
+block content
+	style(nonce=scriptNonce).
+		.fm-page { max-width: 960px; padding-top: 48px; padding-bottom: 64px; }
+		.fm-lead { color: var(--content-secondary); max-width: 640px; }
+		.fm-drop {
+			border: 2px dashed var(--border-divider);
+			border-radius: 16px;
+			padding: 32px 24px;
+			text-align: center;
+			cursor: pointer;
+			transition: border-color .15s ease, background-color .15s ease, transform .15s ease;
+		}
+		.fm-drop:hover, .fm-drop:focus-visible { border-color: var(--green-50); outline: none; }
+		.fm-drop.is-dragging { border-color: var(--green-50); background: var(--bg-accent-03, rgba(19, 136, 66, .06)); transform: scale(1.01); }
+		.fm-drop .material-symbols { font-size: 40px; color: var(--green-50); }
+		.fm-list { display: grid; gap: 12px; margin-top: 24px; }
+		.fm-card {
+			display: flex; align-items: center; gap: 16px;
+			border: 1px solid var(--border-divider);
+			border-radius: 12px;
+			padding: 16px 20px;
+			animation: fm-in .2s ease both;
+		}
+		.fm-card-body { flex: 1; min-width: 0; }
+		.fm-preview { font-size: 1.5rem; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+		.fm-meta { color: var(--content-secondary); font-size: var(--font-size-02); }
+		.fm-snippet { font-family: 'DM Mono', monospace; font-size: var(--font-size-01); }
+		.fm-empty { color: var(--content-secondary); text-align: center; padding: 32px 0; }
+		@keyframes fm-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+		@media (prefers-reduced-motion: reduce) { .fm-card, .fm-drop { animation: none; transition: none; } }
+		@media (max-width: 575px) { .fm-card { flex-direction: column; align-items: stretch; } }
+
+	main#main-content.content.content-alt
+		.container.fm-page
+			h1.h2 ฟอนต์
+			p.fm-lead
+				| ฟอนต์ที่อัปโหลดที่นี่ใช้ได้ทุกโปรเจกต์ เมื่อคอมไพล์ด้วย XeLaTeX หรือ LuaLaTeX
+				| (Menu → Compiler) แล้วเรียกใช้ด้วย
+				code \setmainfont{ชื่อฟอนต์}
+				| . ฟอนต์ไทยที่ติดตั้งมาให้แล้ว: Sarabun, Noto Sans Thai, Noto Serif Thai, Laksaman (TH Sarabun) และฟอนต์ชุด TLWG
+
+			if canManageFonts
+				form#fm-upload-form.mt-4
+					label.fm-drop.d-block#fm-drop(for='fm-file-input' tabindex='0')
+						span.material-symbols(aria-hidden='true' translate='no') upload_file
+						div.mt-2.fw-semibold ลากไฟล์ฟอนต์มาวาง หรือคลิกเพื่อเลือก
+						div.fm-meta .ttf, .otf, .ttc ไฟล์ละไม่เกิน #{maxFontSizeMb} MB, ครั้งละไม่เกิน 20 ไฟล์
+					input#fm-file-input.d-none(type='file' name='fonts' multiple accept='.ttf,.otf,.ttc,.otc')
+				div#fm-messages.mt-3(aria-live='polite')
+
+			div#fm-list.fm-list
+
+block append foot-scripts
+	script(type='text/javascript' nonce=scriptNonce).
+		(function () {
+			var meta = function (name) { return document.querySelector('meta[name="' + name + '"]') }
+			var fonts = JSON.parse(meta('ol-fonts').content || '[]')
+			var canManage = meta('ol-canManageFonts').content === 'true'
+			var csrfToken = meta('ol-csrfToken').content
+			var listEl = document.getElementById('fm-list')
+			var messagesEl = document.getElementById('fm-messages')
+			var loadedFaces = {}
+			var PREVIEW = 'สวัสดีครับ ภาษาไทย LaTeX — The quick brown fox 0123'
+
+			function el(tag, className, text) {
+				var node = document.createElement(tag)
+				if (className) node.className = className
+				if (text != null) node.textContent = text
+				return node
+			}
+
+			function formatSize(bytes) {
+				return bytes > 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB'
+			}
+
+			function previewFamily(font) {
+				var key = 'fm-' + font.fileName
+				if (!loadedFaces[key] && window.FontFace) {
+					loadedFaces[key] = true
+					var face = new FontFace(key, 'url(/fonts/file/' + encodeURIComponent(font.fileName) + ')')
+					face.load().then(function (f) { document.fonts.add(f) }).catch(function () {})
+				}
+				return '"' + key + '", var(--font-sans)'
+			}
+
+			function showMessage(type, text) {
+				var box = el('div', 'notification notification-type-' + type)
+				box.setAttribute('role', type === 'error' ? 'alert' : 'status')
+				var content = el('div', 'notification-content', text)
+				box.appendChild(content)
+				messagesEl.appendChild(box)
+				setTimeout(function () { box.remove() }, 8000)
+			}
+
+			function render() {
+				listEl.textContent = ''
+				if (fonts.length === 0) {
+					listEl.appendChild(el('div', 'fm-empty', 'ยังไม่มีฟอนต์ที่อัปโหลด'))
+					return
+				}
+				fonts.forEach(function (font, i) {
+					var card = el('div', 'fm-card')
+					card.style.animationDelay = Math.min(i * 30, 300) + 'ms'
+					var body = el('div', 'fm-card-body')
+					var preview = el('div', 'fm-preview', PREVIEW)
+					preview.style.fontFamily = previewFamily(font)
+					body.appendChild(preview)
+					var styles = font.styles.length ? ' · ' + font.styles.join(', ') : ''
+					body.appendChild(el('div', 'fm-meta', font.family + styles + ' · ' + font.fileName + ' · ' + formatSize(font.size)))
+					var snippetText = '\\setmainfont{' + font.family + '}'
+					body.appendChild(el('code', 'fm-snippet', snippetText))
+					card.appendChild(body)
+
+					var actions = el('div', 'd-flex gap-2')
+					var copyBtn = el('button', 'btn btn-secondary btn-sm', 'คัดลอกโค้ด')
+					copyBtn.type = 'button'
+					copyBtn.addEventListener('click', function () {
+						navigator.clipboard.writeText(snippetText).then(function () {
+							copyBtn.textContent = 'คัดลอกแล้ว'
+							setTimeout(function () { copyBtn.textContent = 'คัดลอกโค้ด' }, 1500)
+						})
+					})
+					actions.appendChild(copyBtn)
+					if (canManage) {
+						var delBtn = el('button', 'btn btn-danger-ghost btn-sm', 'ลบ')
+						delBtn.type = 'button'
+						delBtn.addEventListener('click', function () {
+							if (!confirm('ลบฟอนต์ ' + font.fileName + ' ?')) return
+							delBtn.disabled = true
+							post('/fonts/' + encodeURIComponent(font.fileName) + '/delete')
+								.then(function (data) { fonts = data.fonts; render() })
+								.catch(function (err) { delBtn.disabled = false; showMessage('error', err.message) })
+						})
+						actions.appendChild(delBtn)
+					}
+					card.appendChild(actions)
+					listEl.appendChild(card)
+				})
+			}
+
+			function post(url, body) {
+				return fetch(url, {
+					method: 'POST',
+					headers: { 'X-Csrf-Token': csrfToken, Accept: 'application/json' },
+					credentials: 'same-origin',
+					body: body,
+				}).then(function (res) {
+					return res.json().catch(function () { return {} }).then(function (data) {
+						if (!res.ok && !(data && data.fonts)) throw new Error(data.message || 'เกิดข้อผิดพลาด (' + res.status + ')')
+						return data
+					})
+				})
+			}
+
+			function upload(files) {
+				if (!files || files.length === 0) return
+				var form = new FormData()
+				Array.prototype.forEach.call(files, function (f) { form.append('fonts', f, f.name) })
+				var drop = document.getElementById('fm-drop')
+				drop.classList.add('is-dragging')
+				drop.querySelector('.fw-semibold').textContent = 'กำลังอัปโหลด ' + files.length + ' ไฟล์…'
+				post('/fonts/upload', form)
+					.then(function (data) {
+						fonts = data.fonts
+						render()
+						if (data.added && data.added.length) showMessage('success', 'เพิ่มแล้ว ' + data.added.length + ' ฟอนต์ ใช้ได้ทันทีในการคอมไพล์ครั้งถัดไป')
+						;(data.rejected || []).forEach(function (r) { showMessage('error', r.name + ': ' + r.reason) })
+					})
+					.catch(function (err) { showMessage('error', err.message) })
+					.finally(function () {
+						drop.classList.remove('is-dragging')
+						drop.querySelector('.fw-semibold').textContent = 'ลากไฟล์ฟอนต์มาวาง หรือคลิกเพื่อเลือก'
+						document.getElementById('fm-file-input').value = ''
+					})
+			}
+
+			if (canManage) {
+				var drop = document.getElementById('fm-drop')
+				var input = document.getElementById('fm-file-input')
+				input.addEventListener('change', function () { upload(input.files) })
+				drop.addEventListener('keydown', function (e) {
+					if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click() }
+				})
+				;['dragenter', 'dragover'].forEach(function (type) {
+					drop.addEventListener(type, function (e) { e.preventDefault(); drop.classList.add('is-dragging') })
+				})
+				;['dragleave', 'drop'].forEach(function (type) {
+					drop.addEventListener(type, function (e) { e.preventDefault(); drop.classList.remove('is-dragging') })
+				})
+				drop.addEventListener('drop', function (e) { upload(e.dataTransfer.files) })
+			}
+
+			render()
+		})()

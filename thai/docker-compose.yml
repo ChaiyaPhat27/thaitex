@@ -1,0 +1,57 @@
+# Overleaf CE+ ภาษาไทย: เปิดใช้ด้วย  docker compose -f thai/docker-compose.yml up -d
+# แล้วเข้า http://localhost/launchpad เพื่อสร้างบัญชีแอดมินคนแรก
+services:
+  sharelatex:
+    restart: always
+    image: thaitex/sharelatex:latest
+    container_name: sharelatex
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - 80:80
+    stop_grace_period: 60s
+    volumes:
+      - ./data/sharelatex:/var/lib/overleaf
+    environment:
+      OVERLEAF_APP_NAME: ThaiTeX
+      OVERLEAF_NAV_TITLE: ThaiTeX
+      OVERLEAF_SITE_URL: ${OVERLEAF_SITE_URL:-http://localhost}
+      OVERLEAF_BEHIND_PROXY: "true"
+      OVERLEAF_MONGO_URL: mongodb://mongo/sharelatex
+      OVERLEAF_REDIS_HOST: redis
+      REDIS_HOST: redis
+      # สร้างด้วย: openssl rand -base64 32
+      OVERLEAF_INVITE_TOKEN_SECRET: change-me
+      ENABLED_LINKED_FILE_TYPES: "project_file,project_output_file,url,zotero"
+      ENABLE_CONVERSIONS: "true"
+      EMAIL_CONFIRMATION_DISABLED: "true"
+      # เวลาคอมไพล์สูงสุด (วินาที) ตั้งให้ยาวเท่าแผน Pro
+      COMPILE_TIMEOUT: "240"
+
+  mongo:
+    restart: always
+    image: mongo:8.0
+    container_name: mongo
+    command: "--replSet overleaf"
+    volumes:
+      - ./data/mongo:/data/db
+      - ../bin/shared/mongodb-init-replica-set.js:/docker-entrypoint-initdb.d/mongodb-init-replica-set.js
+    environment:
+      MONGO_INITDB_DATABASE: sharelatex
+    extra_hosts:
+      - mongo:127.0.0.1
+    healthcheck:
+      test: echo 'db.stats().ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    restart: always
+    image: redis:6.2
+    container_name: redis
+    volumes:
+      - ./data/redis:/data
